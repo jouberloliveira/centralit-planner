@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  build:
+    name: install / lint / typecheck / build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared package first
+        run: pnpm --filter @centralit/shared run build
+
+      - name: Typecheck
+        run: pnpm -r run typecheck
+
+      - name: Lint
+        run: pnpm -r run lint
+
+      - name: Build apps
+        run: |
+          pnpm --filter @centralit/api run build
+          pnpm --filter @centralit/web run build
