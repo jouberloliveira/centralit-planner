@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import type {
   PrismaClient,
   Project,
+  ProjectMembership,
+  ProjectRole,
   User,
   WorkItem,
   WorkItemType,
@@ -41,11 +43,19 @@ function matches<T>(row: T, where: Partial<Record<keyof T, unknown>>): boolean {
       if (actual !== null && actual !== undefined) return false;
       continue;
     }
-    if (typeof v === 'object' && v !== null && 'contains' in (v as Record<string, unknown>)) {
-      const needle = String((v as { contains: string }).contains).toLowerCase();
-      const hay = String(actual ?? '').toLowerCase();
-      if (!hay.includes(needle)) return false;
-      continue;
+    if (typeof v === 'object' && v !== null) {
+      const op = v as Record<string, unknown>;
+      if (Array.isArray((op as { in?: unknown }).in)) {
+        const list = (op as { in: unknown[] }).in;
+        if (!list.includes(actual as unknown)) return false;
+        continue;
+      }
+      if ('contains' in op) {
+        const needle = String((op as { contains: string }).contains).toLowerCase();
+        const hay = String(actual ?? '').toLowerCase();
+        if (!hay.includes(needle)) return false;
+        continue;
+      }
     }
     if (actual !== v) return false;
   }
@@ -67,10 +77,11 @@ export interface FakePrismaState {
   users: User[];
   projects: Project[];
   workItems: WorkItem[];
+  memberships: ProjectMembership[];
 }
 
 export function createFakePrisma(): { prisma: PrismaClient; state: FakePrismaState } {
-  const state: FakePrismaState = { users: [], projects: [], workItems: [] };
+  const state: FakePrismaState = { users: [], projects: [], workItems: [], memberships: [] };
 
   const now = (): Date => new Date();
 
@@ -105,8 +116,14 @@ export function createFakePrisma(): { prisma: PrismaClient; state: FakePrismaSta
       );
       return found ?? null;
     },
-    findMany: async (): Promise<Project[]> => [...state.projects],
-    count: async (): Promise<number> => state.projects.length,
+    findMany: async ({
+      where,
+    }: { where?: Record<string, unknown>; orderBy?: unknown } = {}): Promise<Project[]> => {
+      return state.projects.filter((p) => (where ? evalWhere(p, where) : true));
+    },
+    count: async ({ where }: { where?: Record<string, unknown> } = {}): Promise<number> => {
+      return state.projects.filter((p) => (where ? evalWhere(p, where) : true)).length;
+    },
     create: async ({ data }: { data: CreateProjectInput }): Promise<Project> => {
       const project: Project = {
         id: randomUUID(),
@@ -143,6 +160,7 @@ export function createFakePrisma(): { prisma: PrismaClient; state: FakePrismaSta
       if (idx === -1) throw Object.assign(new Error('not found'), { code: 'P2025' });
       const [removed] = state.projects.splice(idx, 1);
       state.workItems = state.workItems.filter((w) => w.projectId !== where.id);
+      state.memberships = state.memberships.filter((m) => m.projectId !== where.id);
       return removed!;
     },
   };
@@ -240,10 +258,79 @@ export function createFakePrisma(): { prisma: PrismaClient; state: FakePrismaSta
     },
   };
 
+  type MembershipSelect = Partial<Record<keyof ProjectMembership, boolean>>;
+
+  const projectMembershipApi = {
+    findUnique: async ({
+      where,
+    }: {
+      where: { userId_projectId: { userId: string; projectId: string } };
+    }): Promise<ProjectMembership | null> => {
+      const k = where.userId_projectId;
+      return (
+        state.memberships.find(
+          (m) => m.userId === k.userId && m.projectId === k.projectId,
+        ) ?? null
+      );
+    },
+    findMany: async ({
+      where,
+      select,
+    }: {
+      where?: { userId?: string; projectId?: string };
+      select?: MembershipSelect;
+    } = {}): Promise<Array<Partial<ProjectMembership>>> => {
+      const rows = state.memberships.filter(
+        (m) =>
+          (!where?.userId || m.userId === where.userId) &&
+          (!where?.projectId || m.projectId === where.projectId),
+      );
+      if (!select) return rows;
+      return rows.map((m) => {
+        const out: Partial<ProjectMembership> = {};
+        for (const [k, v] of Object.entries(select) as Array<[
+          keyof ProjectMembership,
+          boolean,
+        ]>) {
+          if (v) out[k] = m[k] as never;
+        }
+        return out;
+      });
+    },
+    create: async ({
+      data,
+    }: {
+      data: { userId: string; projectId: string; role: ProjectRole };
+    }): Promise<ProjectMembership> => {
+      const row: ProjectMembership = {
+        userId: data.userId,
+        projectId: data.projectId,
+        role: data.role,
+        createdAt: now(),
+      };
+      state.memberships.push(row);
+      return row;
+    },
+    delete: async ({
+      where,
+    }: {
+      where: { userId_projectId: { userId: string; projectId: string } };
+    }): Promise<ProjectMembership> => {
+      const k = where.userId_projectId;
+      const idx = state.memberships.findIndex(
+        (m) => m.userId === k.userId && m.projectId === k.projectId,
+      );
+      if (idx === -1) throw Object.assign(new Error('not found'), { code: 'P2025' });
+      const [removed] = state.memberships.splice(idx, 1);
+      return removed!;
+    },
+  };
+
   const prisma = {
     user: userApi,
     project: projectApi,
     workItem: workItemApi,
+    projectMembership: projectMembershipApi,
     $disconnect: async () => undefined,
   } as unknown as PrismaClient;
 
