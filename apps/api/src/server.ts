@@ -8,7 +8,9 @@ async function main(): Promise<void> {
     prisma,
     jwtSecret: env.JWT_SECRET,
     jwtExpiresIn: env.JWT_EXPIRES_IN,
-    corsOrigin: env.CORS_ORIGIN === '*' ? true : env.CORS_ORIGIN.split(',').map((s) => s.trim()),
+    corsOrigin: env.CORS_ORIGIN.split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0),
     logLevel: env.LOG_LEVEL,
   });
 

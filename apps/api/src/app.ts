@@ -23,7 +23,7 @@ export interface BuildAppOptions {
   prisma: PrismaClient;
   jwtSecret: string;
   jwtExpiresIn?: string;
-  corsOrigin?: string | string[] | boolean;
+  corsOrigin?: string[];
   logLevel?: string;
 }
 
@@ -77,9 +77,25 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   });
 
   await app.register(helmet, { contentSecurityPolicy: false });
+
+  const allowedOrigins = opts.corsOrigin ?? [];
+  if (allowedOrigins.length === 0) {
+    throw new Error(
+      'buildApp: corsOrigin must be a non-empty allow-list. The API sends credentials; reflecting Origin is unsafe.',
+    );
+  }
   await app.register(cors, {
-    origin: opts.corsOrigin ?? true,
+    origin: (origin, cb) => {
+      if (!origin) {
+        cb(null, false);
+        return;
+      }
+      cb(null, allowedOrigins.includes(origin));
+    },
     credentials: true,
+    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['authorization', 'content-type', 'x-request-id'],
+    maxAge: 600,
   });
   await app.register(jwt, {
     secret: opts.jwtSecret,

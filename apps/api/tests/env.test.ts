@@ -4,6 +4,7 @@ import { loadEnv } from '../src/env.js';
 
 const baseEnv = {
   DATABASE_URL: 'postgresql://u:p@localhost:5432/db',
+  CORS_ORIGIN: 'http://localhost:5173',
 };
 
 describe('loadEnv', () => {
