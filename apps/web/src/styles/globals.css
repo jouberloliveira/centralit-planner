@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --surface-bg: 220 25% 97%;
+    --surface-raised: 0 0% 100%;
+    --surface-column: 220 19% 94%;
+    --surface-drawer: 0 0% 100%;
+
+    --border-default: 220 14% 89%;
+    --border-subtle: 220 19% 94%;
+    --border-strong: 220 12% 79%;
+    --border-focus: 224 98% 62%;
+
+    --fg-primary: 222 49% 9%;
+    --fg-secondary: 218 17% 35%;
+    --fg-tertiary: 220 9% 46%;
+    --fg-disabled: 220 9% 64%;
+    --fg-on-brand: 0 0% 100%;
+    --fg-link: 224 67% 53%;
+
+    --overlay: 222 49% 9% / 0.48;
+
+    color-scheme: light;
+  }
+
+  .dark {
+    --surface-bg: 222 49% 9%;
+    --surface-raised: 220 23% 13%;
+    --surface-column: 220 24% 17%;
+    --surface-drawer: 220 23% 13%;
+
+    --border-default: 220 24% 22%;
+    --border-subtle: 220 24% 17%;
+    --border-strong: 218 17% 30%;
+
+    --fg-primary: 220 25% 97%;
+    --fg-secondary: 220 12% 79%;
+    --fg-tertiary: 220 9% 64%;
+    --fg-disabled: 220 9% 46%;
+
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-surface text-fg font-sans antialiased;
+    font-feature-settings: 'cv11', 'ss01', 'ss03';
+  }
+
+  *:focus-visible {
+    outline: none;
+    @apply ring-2 ring-border-focus ring-offset-2 ring-offset-surface;
+  }
+}

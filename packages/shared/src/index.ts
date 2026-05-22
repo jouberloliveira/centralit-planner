@@ -75,6 +75,13 @@ export const workItemListQuerySchema = z.object({
 });
 export type WorkItemListQuery = z.infer<typeof workItemListQuerySchema>;
 
+export const issueKindSchema = workItemKindSchema;
+export type IssueKind = WorkItemKind;
+export const issueStatusSchema = workItemStatusSchema;
+export type IssueStatus = WorkItemStatus;
+export const issuePrioritySchema = workItemPrioritySchema;
+export type IssuePriority = WorkItemPriority;
+
 export const projectSchema = z.object({
   id: z.string().uuid(),
   key: z.string().min(2).max(10),
