@@ -1,6 +1,8 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { QueryClientProvider } from '@tanstack/react-query';
+import { DndProvider } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthContext';
 import { ProtectedRoute } from './auth/ProtectedRoute';
@@ -23,27 +25,29 @@ const queryClient = createQueryClient();
 ReactDOM.createRoot(root).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <AuthProvider>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/register" element={<RegisterPage />} />
-            <Route element={<ProtectedRoute />}>
-              <Route element={<AppShell />}>
-                <Route index element={<ProjectsPage />} />
-                <Route path="projects/:projectId" element={<ProjectLayout />}>
-                  <Route index element={<BoardPage />} />
-                  <Route path="tree" element={<TreePage />} />
+      <DndProvider backend={HTML5Backend}>
+        <BrowserRouter>
+          <AuthProvider>
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
+              <Route element={<ProtectedRoute />}>
+                <Route element={<AppShell />}>
+                  <Route index element={<ProjectsPage />} />
+                  <Route path="projects/:projectId" element={<ProjectLayout />}>
+                    <Route index element={<BoardPage />} />
+                    <Route path="tree" element={<TreePage />} />
+                  </Route>
+                  <Route path="starred" element={<Navigate to="/" replace />} />
+                  <Route path="people" element={<Navigate to="/" replace />} />
+                  <Route path="settings" element={<Navigate to="/" replace />} />
                 </Route>
-                <Route path="starred" element={<Navigate to="/" replace />} />
-                <Route path="people" element={<Navigate to="/" replace />} />
-                <Route path="settings" element={<Navigate to="/" replace />} />
               </Route>
-            </Route>
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </AuthProvider>
-      </BrowserRouter>
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </AuthProvider>
+        </BrowserRouter>
+      </DndProvider>
     </QueryClientProvider>
   </React.StrictMode>,
 );
