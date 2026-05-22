@@ -9,6 +9,7 @@ async function setup(): Promise<{ app: FastifyInstance; token: string; userId: s
     prisma,
     jwtSecret: 'test-secret-test-secret-test-secret',
     jwtExpiresIn: '1h',
+    corsOrigin: ['http://localhost:5173'],
     logLevel: 'silent',
   });
   await app.ready();
@@ -25,7 +26,12 @@ async function setup(): Promise<{ app: FastifyInstance; token: string; userId: s
 describe('health', () => {
   it('returns ok', async () => {
     const { prisma } = createFakePrisma();
-    const app = await buildApp({ prisma, jwtSecret: 'x'.repeat(32), logLevel: 'silent' });
+    const app = await buildApp({
+      prisma,
+      jwtSecret: 'x'.repeat(32),
+      corsOrigin: ['http://localhost:5173'],
+      logLevel: 'silent',
+    });
     await app.ready();
     const res = await app.inject({ method: 'GET', url: '/health' });
     expect(res.statusCode).toBe(200);

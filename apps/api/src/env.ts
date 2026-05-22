@@ -13,7 +13,13 @@ const envSchema = z
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
       .default('info'),
-    CORS_ORIGIN: z.string().default('*'),
+    CORS_ORIGIN: z
+      .string()
+      .min(1, 'CORS_ORIGIN is required (comma-separated list of full origins, e.g. https://app.example.com)')
+      .refine(
+        (v) => !v.split(',').map((s) => s.trim()).includes('*'),
+        'CORS_ORIGIN=* is forbidden: the API sends credentials, so an explicit allow-list is required',
+      ),
   })
   .superRefine((data, ctx) => {
     if (data.NODE_ENV !== 'production') return;

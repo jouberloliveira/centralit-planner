@@ -29,6 +29,7 @@ async function bootstrap(): Promise<{
     prisma,
     jwtSecret: 'test-secret-test-secret-test-secret',
     jwtExpiresIn: '1h',
+    corsOrigin: ['http://localhost:5173'],
     logLevel: 'silent',
   });
   await app.ready();
