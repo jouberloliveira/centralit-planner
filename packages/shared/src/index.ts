@@ -1,9 +1,9 @@
 import { z } from 'zod';
 
-export const issueKindSchema = z.enum(['epic', 'feature', 'story', 'task']);
-export type IssueKind = z.infer<typeof issueKindSchema>;
+export const workItemKindSchema = z.enum(['epic', 'feature', 'story', 'task']);
+export type WorkItemKind = z.infer<typeof workItemKindSchema>;
 
-export const issueStatusSchema = z.enum([
+export const workItemStatusSchema = z.enum([
   'backlog',
   'todo',
   'in_progress',
@@ -11,68 +11,105 @@ export const issueStatusSchema = z.enum([
   'done',
   'cancelled',
 ]);
-export type IssueStatus = z.infer<typeof issueStatusSchema>;
+export type WorkItemStatus = z.infer<typeof workItemStatusSchema>;
 
-export const issuePrioritySchema = z.enum(['low', 'medium', 'high', 'critical']);
-export type IssuePriority = z.infer<typeof issuePrioritySchema>;
+export const workItemPrioritySchema = z.enum(['critical', 'high', 'medium', 'low']);
+export type WorkItemPriority = z.infer<typeof workItemPrioritySchema>;
 
-export const issueBaseSchema = z.object({
+export const workItemSchema = z.object({
   id: z.string().uuid(),
-  kind: issueKindSchema,
+  kind: workItemKindSchema,
   title: z.string().min(1).max(300),
-  description: z.string().optional(),
-  status: issueStatusSchema,
-  priority: issuePrioritySchema,
-  parentId: z.string().uuid().nullable().optional(),
+  description: z.string().nullable().optional(),
+  status: workItemStatusSchema,
+  priority: workItemPrioritySchema,
   projectId: z.string().uuid(),
+  parentId: z.string().uuid().nullable().optional(),
   assigneeId: z.string().uuid().nullable().optional(),
+  attributes: z.record(z.string(), z.unknown()).optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
-export type IssueBase = z.infer<typeof issueBaseSchema>;
+export type WorkItem = z.infer<typeof workItemSchema>;
 
-export const issueCreateSchema = issueBaseSchema
-  .pick({
-    kind: true,
-    title: true,
-    description: true,
-    priority: true,
-    parentId: true,
-    projectId: true,
-  })
-  .extend({
-    status: issueStatusSchema.default('backlog'),
-  });
-export type IssueCreate = z.infer<typeof issueCreateSchema>;
+export const workItemCreateSchema = z.object({
+  kind: workItemKindSchema,
+  title: z.string().min(1).max(300),
+  description: z.string().max(10000).optional(),
+  status: workItemStatusSchema.optional(),
+  priority: workItemPrioritySchema.optional(),
+  projectId: z.string().uuid(),
+  parentId: z.string().uuid().nullable().optional(),
+  assigneeId: z.string().uuid().nullable().optional(),
+  attributes: z.record(z.string(), z.unknown()).optional(),
+});
+export type WorkItemCreate = z.infer<typeof workItemCreateSchema>;
 
-export const issueUpdateSchema = issueBaseSchema
-  .pick({
-    title: true,
-    description: true,
-    status: true,
-    priority: true,
-    parentId: true,
-    assigneeId: true,
+export const workItemUpdateSchema = z
+  .object({
+    title: z.string().min(1).max(300),
+    description: z.string().max(10000).nullable(),
+    status: workItemStatusSchema,
+    priority: workItemPrioritySchema,
+    assigneeId: z.string().uuid().nullable(),
+    attributes: z.record(z.string(), z.unknown()),
   })
   .partial();
-export type IssueUpdate = z.infer<typeof issueUpdateSchema>;
+export type WorkItemUpdate = z.infer<typeof workItemUpdateSchema>;
+
+export const workItemMoveSchema = z.object({
+  parentId: z.string().uuid().nullable(),
+});
+export type WorkItemMove = z.infer<typeof workItemMoveSchema>;
+
+export const workItemListQuerySchema = z.object({
+  projectId: z.string().uuid().optional(),
+  kind: workItemKindSchema.optional(),
+  status: workItemStatusSchema.optional(),
+  priority: workItemPrioritySchema.optional(),
+  parentId: z.string().uuid().nullable().optional(),
+  assigneeId: z.string().uuid().nullable().optional(),
+  q: z.string().min(1).max(200).optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+export type WorkItemListQuery = z.infer<typeof workItemListQuerySchema>;
+
+export const issueKindSchema = workItemKindSchema;
+export type IssueKind = WorkItemKind;
+export const issueStatusSchema = workItemStatusSchema;
+export type IssueStatus = WorkItemStatus;
+export const issuePrioritySchema = workItemPrioritySchema;
+export type IssuePriority = WorkItemPriority;
 
 export const projectSchema = z.object({
   id: z.string().uuid(),
   key: z.string().min(2).max(10),
   name: z.string().min(1).max(200),
-  description: z.string().optional(),
+  description: z.string().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
 export type Project = z.infer<typeof projectSchema>;
 
-export const projectCreateSchema = projectSchema.pick({
-  key: true,
-  name: true,
-  description: true,
+export const projectCreateSchema = z.object({
+  key: z
+    .string()
+    .min(2)
+    .max(10)
+    .regex(/^[A-Z][A-Z0-9]+$/, 'key must be uppercase letters and digits'),
+  name: z.string().min(1).max(200),
+  description: z.string().max(2000).optional(),
 });
 export type ProjectCreate = z.infer<typeof projectCreateSchema>;
+
+export const projectUpdateSchema = z
+  .object({
+    name: z.string().min(1).max(200),
+    description: z.string().max(2000).nullable(),
+  })
+  .partial();
+export type ProjectUpdate = z.infer<typeof projectUpdateSchema>;
 
 export const userSchema = z.object({
   id: z.string().uuid(),
@@ -107,3 +144,13 @@ export const healthResponseSchema = z.object({
   timestamp: z.string(),
 });
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
+
+export const errorResponseSchema = z.object({
+  error: z.object({
+    code: z.string(),
+    message: z.string(),
+    details: z.unknown().optional(),
+  }),
+  requestId: z.string().optional(),
+});
+export type ErrorResponse = z.infer<typeof errorResponseSchema>;

@@ -1,21 +1,34 @@
-import Fastify from 'fastify';
-import type { HealthResponse } from '@centralit/shared';
+import { buildApp } from './app.js';
+import { prisma } from './db/client.js';
+import { loadEnv } from './env.js';
 
-const app = Fastify({ logger: true });
-
-app.get('/health', async (): Promise<HealthResponse> => {
-  return { status: 'ok', service: 'centralit-planner-api', timestamp: new Date().toISOString() };
-});
-
-const port = Number(process.env.PORT ?? 3001);
-const host = process.env.HOST ?? '0.0.0.0';
-
-app
-  .listen({ port, host })
-  .then(() => {
-    app.log.info(`API listening on http://${host}:${port}`);
-  })
-  .catch((err) => {
-    app.log.error(err);
-    process.exit(1);
+async function main(): Promise<void> {
+  const env = loadEnv();
+  const app = await buildApp({
+    prisma,
+    jwtSecret: env.JWT_SECRET,
+    jwtExpiresIn: env.JWT_EXPIRES_IN,
+    corsOrigin: env.CORS_ORIGIN === '*' ? true : env.CORS_ORIGIN.split(',').map((s) => s.trim()),
+    logLevel: env.LOG_LEVEL,
   });
+
+  const shutdown = async (signal: string): Promise<void> => {
+    app.log.info({ signal }, 'shutting down');
+    await app.close();
+    await prisma.$disconnect();
+    process.exit(0);
+  };
+  process.once('SIGINT', () => void shutdown('SIGINT'));
+  process.once('SIGTERM', () => void shutdown('SIGTERM'));
+
+  try {
+    const address = await app.listen({ port: env.PORT, host: env.HOST });
+    app.log.info(`API listening on ${address} (docs at /docs)`);
+  } catch (err) {
+    app.log.error({ err }, 'failed to start');
+    await prisma.$disconnect();
+    process.exit(1);
+  }
+}
+
+void main();
