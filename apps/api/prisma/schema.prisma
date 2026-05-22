@@ -1,0 +1,91 @@
+// CentralIT Planner — DB schema
+// Spec: CEN-10 (parent CEN-7 plan)
+// Polymorphic work_items table + self-referential parent + enum-driven hierarchy.
+// Parent-type CHECK constraints are added in the SQL migration (Prisma does not
+// model CHECKs natively); see prisma/migrations/<timestamp>_init.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum WorkItemType {
+  EPIC
+  FEATURE
+  USER_STORY
+  TASK
+}
+
+enum WorkItemStatus {
+  BACKLOG
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  DONE
+  CANCELLED
+}
+
+enum Priority {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  name         String
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  assignedItems WorkItem[] @relation("assignee")
+
+  @@map("users")
+}
+
+model Project {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  key         String   @unique
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workItems WorkItem[]
+
+  @@map("projects")
+}
+
+model WorkItem {
+  id          String         @id @default(uuid()) @db.Uuid
+  type        WorkItemType
+  title       String
+  description String?
+  status      WorkItemStatus @default(BACKLOG)
+  priority    Priority       @default(MEDIUM)
+  attributes  Json           @default("{}") @db.JsonB
+
+  projectId  String  @map("project_id") @db.Uuid
+  parentId   String? @map("parent_id") @db.Uuid
+  assigneeId String? @map("assignee_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  project  Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parent   WorkItem?  @relation("parent_child", fields: [parentId], references: [id], onDelete: SetNull)
+  children WorkItem[] @relation("parent_child")
+  assignee User?      @relation("assignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, type])
+  @@index([parentId])
+  @@index([assigneeId])
+  @@index([status])
+  @@map("work_items")
+}
