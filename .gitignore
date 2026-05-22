@@ -39,3 +39,8 @@ coverage/
 
 # Misc
 *.tgz
+
+# Playwright
+apps/web/playwright-report/
+apps/web/test-results/
+apps/web/.playwright/
