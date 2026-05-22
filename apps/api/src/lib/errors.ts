@@ -5,6 +5,8 @@ export type ErrorCode =
   | 'NOT_FOUND'
   | 'CONFLICT'
   | 'UNPROCESSABLE'
+  | 'PASSWORD_BREACHED'
+  | 'ACCOUNT_LOCKED'
   | 'INTERNAL';
 
 export class HttpError extends Error {
@@ -29,3 +31,9 @@ export const conflict = (msg: string, details?: unknown): HttpError =>
   new HttpError(409, 'CONFLICT', msg, details);
 export const unprocessable = (msg: string, details?: unknown): HttpError =>
   new HttpError(422, 'UNPROCESSABLE', msg, details);
+export const passwordBreached = (msg: string, details?: unknown): HttpError =>
+  new HttpError(422, 'PASSWORD_BREACHED', msg, details);
+export const accountLocked = (retryAfterSeconds: number): HttpError =>
+  new HttpError(423, 'ACCOUNT_LOCKED', 'Account temporarily locked due to repeated failed logins', {
+    retryAfterSeconds,
+  });

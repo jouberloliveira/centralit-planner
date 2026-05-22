@@ -316,13 +316,36 @@ export async function registerWorkItemRoutes(app: FastifyInstance): Promise<void
         }
         const parent = await app.prisma.workItem.findUnique({
           where: { id: parentId },
-          select: { type: true, projectId: true },
+          select: { type: true, projectId: true, parentId: true },
         });
         if (!parent) {
           throw notFound(`Parent ${parentId} not found`);
         }
         if (parent.projectId !== item.projectId) {
           throw badRequest('Parent belongs to a different project');
+        }
+        // CEN-22 H4: walk ancestor chain from the proposed new parent. If we
+        // ever reach the item being moved, the move would create a cycle.
+        // Depth capped at 50 — both a defense against pathological chains and
+        // a safety net if schema invariants break.
+        const MAX_DEPTH = 50;
+        let cursor: string | null = parent.parentId;
+        let depth = 0;
+        while (cursor !== null && depth < MAX_DEPTH) {
+          if (cursor === id) {
+            throw badRequest('Reparent would create a cycle');
+          }
+          const ancestor: { parentId: string | null } | null =
+            await app.prisma.workItem.findUnique({
+              where: { id: cursor },
+              select: { parentId: true },
+            });
+          if (!ancestor) break;
+          cursor = ancestor.parentId;
+          depth += 1;
+        }
+        if (cursor !== null) {
+          throw badRequest('Ancestor chain exceeds maximum depth (50)');
         }
         // Parent is in the same project (already enforced); writer check on
         // that project covers cross-tenant abuse.

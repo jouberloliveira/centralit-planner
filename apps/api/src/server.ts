@@ -12,6 +12,7 @@ async function main(): Promise<void> {
       .map((s) => s.trim())
       .filter((s) => s.length > 0),
     logLevel: env.LOG_LEVEL,
+    enableRateLimit: true,
   });
 
   const shutdown = async (signal: string): Promise<void> => {

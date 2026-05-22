@@ -125,9 +125,14 @@ export const loginSchema = z.object({
 });
 export type LoginInput = z.infer<typeof loginSchema>;
 
+// Minimum length for new registrations (CEN-22 H3). Login schema stays at
+// min(8) so legacy users with shorter passwords are not locked out on deploy.
 export const registerSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(8).max(200),
+  password: z
+    .string()
+    .min(12, 'Password must be at least 12 characters')
+    .max(200),
   name: z.string().min(1).max(120),
 });
 export type RegisterInput = z.infer<typeof registerSchema>;

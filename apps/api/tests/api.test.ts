@@ -17,7 +17,7 @@ async function setup(): Promise<{ app: FastifyInstance; token: string; userId: s
   const reg = await app.inject({
     method: 'POST',
     url: '/auth/register',
-    payload: { email: 'alice@example.com', password: 'password123', name: 'Alice' },
+    payload: { email: 'alice@example.com', password: 'password1234', name: 'Alice' },
   });
   const body = reg.json() as { token: string; user: { id: string } };
   return { app, token: body.token, userId: body.user.id };
@@ -61,7 +61,7 @@ describe('auth', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/auth/login',
-      payload: { email: 'alice@example.com', password: 'password123' },
+      payload: { email: 'alice@example.com', password: 'password1234' },
     });
     expect(res.statusCode).toBe(200);
     const body = res.json() as { token: string; user: { email: string } };
@@ -78,7 +78,7 @@ describe('auth', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/auth/register',
-      payload: { email: 'alice@example.com', password: 'password123', name: 'Alice' },
+      payload: { email: 'alice@example.com', password: 'password1234', name: 'Alice' },
     });
     expect(res.statusCode).toBe(409);
   });

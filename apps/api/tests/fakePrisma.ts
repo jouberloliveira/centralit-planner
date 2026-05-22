@@ -105,6 +105,25 @@ export function createFakePrisma(): { prisma: PrismaClient; state: FakePrismaSta
       state.users.push(user);
       return user;
     },
+    update: async ({
+      where,
+      data,
+    }: {
+      where: { id: string };
+      data: Partial<Pick<User, 'name' | 'passwordHash'>>;
+    }): Promise<User> => {
+      const idx = state.users.findIndex((u) => u.id === where.id);
+      if (idx === -1) throw Object.assign(new Error('not found'), { code: 'P2025' });
+      const current = state.users[idx]!;
+      const updated: User = {
+        ...current,
+        ...(data.name !== undefined ? { name: data.name } : {}),
+        ...(data.passwordHash !== undefined ? { passwordHash: data.passwordHash } : {}),
+        updatedAt: now(),
+      };
+      state.users[idx] = updated;
+      return updated;
+    },
   };
 
   const projectApi = {

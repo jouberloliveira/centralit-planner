@@ -23,11 +23,11 @@ In addition, the auth flow lacks rate-limiting/lockout, bcrypt cost is below OWA
 
 | STRIDE | Asset / Component | Threat | Status |
 |---|---|---|---|
-| **S**poofing | JWT-bearing identity | Token forgery via predictable/default `JWT_SECRET`; no MFA; no lockout | Open (C2, H1) |
+| **S**poofing | JWT-bearing identity | Token forgery via predictable/default `JWT_SECRET`; no MFA; no lockout | Closed (C2 via CEN-20, H1 via CEN-22) |
 | **T**ampering | Work items, projects, user attributes blob | IDOR write via direct `:id` access; unbounded `attributes` JSON | Open (C3, M5) |
 | **R**epudiation | Mutating endpoints (POST/PATCH/DELETE) | No audit log of who changed what (only request log) | Open (M8) |
 | **I**nformation disclosure | `/auth/register` 409, `/docs`, JWT payload, error messages | Email enumeration; OpenAPI schema unauth; PII (`email`) in JWT claim | Open (M2, M3, M7) |
-| **D**enial of service | `/auth/*`, `/work-items/*`, request bodies | No rate-limit; no per-IP throttling; unbounded `attributes`; default 1MB body limit only | Open (H1, M5, L3) |
+| **D**enial of service | `/auth/*`, `/work-items/*`, request bodies | No rate-limit; no per-IP throttling; unbounded `attributes`; default 1MB body limit only | Partly closed (H1 via CEN-22); M5/L3 still open |
 | **E**levation of privilege | Any authenticated user → tenant-wide admin | Missing ownership/membership model; JWT forge → any user | Open (C2, C3) |
 
 Trust boundaries today:
@@ -279,10 +279,10 @@ Verdict on **"Verify auth/authorization on every protected route"**: ❌ authent
 - [ ] C3 — Add `ProjectMembership` model + `assertProjectAccess(userId, projectId, role)`; filter list endpoints by membership; add 403 path tests.
 
 **This sprint (HIGH):**
-- [ ] H1 — Register `@fastify/rate-limit` globally (e.g. 100/min) and per-auth-route (5/min); add account lockout counter.
-- [ ] H2 — bcrypt rounds → 12 (or migrate to argon2id); rehash-on-login.
-- [ ] H3 — Reject known-breached passwords (HIBP k-anonymity); raise min length to 12 for new registrations.
-- [ ] H4 — Walk ancestor chain in `move` to reject cycles; cap depth.
+- [x] H1 — Register `@fastify/rate-limit` globally (e.g. 100/min) and per-auth-route (5/min); add account lockout counter. **Done in CEN-22** (`apps/api/src/app.ts`, `apps/api/src/routes/auth.ts`, `apps/api/src/lib/lockout.ts`). 429 from global limit, 423 `ACCOUNT_LOCKED` after 10 failed attempts/15 min window. Covered by `tests/cen22.test.ts`.
+- [x] H2 — bcrypt rounds → 12 (or migrate to argon2id); rehash-on-login. **Done in CEN-22** (`apps/api/src/lib/password.ts`, `apps/api/src/routes/auth.ts`). `ROUNDS = 12`; legacy cost-10 hashes are silently upgraded on successful login via `needsRehash`. Covered by `tests/cen22.test.ts`.
+- [x] H3 — Reject known-breached passwords (HIBP k-anonymity); raise min length to 12 for new registrations. **Done in CEN-22** (`apps/api/src/lib/hibp.ts`, `packages/shared/src/index.ts`). New `registerSchema` enforces `min(12)`; HIBP range API checked on register, fails open on transient errors, returns 422 `PASSWORD_BREACHED` on hit. Covered by `tests/cen22.test.ts`.
+- [x] H4 — Walk ancestor chain in `move` to reject cycles; cap depth. **Done in CEN-22** (`apps/api/src/routes/workItems.ts`). Traversal from `newParentId` upward; 400 `Reparent would create a cycle` if `itemId` is reached, depth capped at 50. Covered by `tests/cen22.test.ts`.
 
 **Next sprint (MEDIUM):**
 - [ ] M1, M2, M3, M4, M5, M6, M7, M8.
