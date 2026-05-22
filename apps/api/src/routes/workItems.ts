@@ -8,7 +8,7 @@ import {
   workItemSchema,
   workItemUpdateSchema,
 } from '@centralit/shared';
-import { badRequest, notFound } from '../lib/errors.js';
+import { badRequest, notFound, unauthorized } from '../lib/errors.js';
 import {
   kindToPrisma,
   priorityToPrisma,
@@ -16,6 +16,7 @@ import {
   toWorkItemDTO,
 } from '../lib/mappers.js';
 import { assertParentAllowed, WorkItemParentRuleError } from '../db/workItems.js';
+import { assertProjectAccess, getMemberProjectIds } from '../lib/access.js';
 
 const idParamsSchema = z.object({ id: z.string().uuid() });
 const listResponseSchema = z.object({
@@ -25,6 +26,12 @@ const listResponseSchema = z.object({
   offset: z.number().int(),
 });
 
+function currentUserId(req: { user?: { sub?: string } }): string {
+  const sub = req.user?.sub;
+  if (!sub) throw unauthorized('Missing user context');
+  return sub;
+}
+
 export async function registerWorkItemRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', app.requireAuth);
 
@@ -33,16 +40,30 @@ export async function registerWorkItemRoutes(app: FastifyInstance): Promise<void
     {
       schema: {
         tags: ['work-items'],
-        summary: 'List work items with filters',
+        summary: 'List work items with filters (scoped to caller memberships)',
         security: [{ bearerAuth: [] }],
         querystring: workItemListQuerySchema,
         response: { 200: listResponseSchema, 401: errorResponseSchema },
       },
     },
     async (req) => {
+      const userId = currentUserId(req);
       const q = req.query as z.infer<typeof workItemListQuerySchema>;
+      const memberIds = await getMemberProjectIds(app.prisma, userId);
+      if (memberIds.length === 0) {
+        return { items: [], total: 0, limit: q.limit, offset: q.offset };
+      }
+
+      let projectScope: { in: string[] } = { in: memberIds };
+      if (q.projectId) {
+        if (!memberIds.includes(q.projectId)) {
+          return { items: [], total: 0, limit: q.limit, offset: q.offset };
+        }
+        projectScope = { in: [q.projectId] };
+      }
+
       const where = {
-        ...(q.projectId ? { projectId: q.projectId } : {}),
+        projectId: projectScope,
         ...(q.kind ? { type: kindToPrisma(q.kind) } : {}),
         ...(q.status ? { status: statusToPrisma(q.status) } : {}),
         ...(q.priority ? { priority: priorityToPrisma(q.priority) } : {}),
@@ -80,23 +101,22 @@ export async function registerWorkItemRoutes(app: FastifyInstance): Promise<void
     {
       schema: {
         tags: ['work-items'],
-        summary: 'Create a work item',
+        summary: 'Create a work item (writer+ on target project)',
         security: [{ bearerAuth: [] }],
         body: workItemCreateSchema,
         response: {
           201: workItemSchema,
           400: errorResponseSchema,
           401: errorResponseSchema,
+          403: errorResponseSchema,
           404: errorResponseSchema,
         },
       },
     },
     async (req, reply) => {
+      const userId = currentUserId(req);
       const body = req.body as z.infer<typeof workItemCreateSchema>;
-      const project = await app.prisma.project.findUnique({ where: { id: body.projectId } });
-      if (!project) {
-        throw notFound(`Project ${body.projectId} not found`);
-      }
+      await assertProjectAccess(app.prisma, userId, body.projectId, 'writer');
 
       let parentType: ReturnType<typeof kindToPrisma> | null = null;
       if (body.parentId) {
@@ -151,22 +171,25 @@ export async function registerWorkItemRoutes(app: FastifyInstance): Promise<void
     {
       schema: {
         tags: ['work-items'],
-        summary: 'Read a work item',
+        summary: 'Read a work item (reader+ on its project)',
         security: [{ bearerAuth: [] }],
         params: idParamsSchema,
         response: {
           200: workItemSchema,
           401: errorResponseSchema,
+          403: errorResponseSchema,
           404: errorResponseSchema,
         },
       },
     },
     async (req) => {
+      const userId = currentUserId(req);
       const { id } = req.params as z.infer<typeof idParamsSchema>;
       const item = await app.prisma.workItem.findUnique({ where: { id } });
       if (!item) {
         throw notFound(`Work item ${id} not found`);
       }
+      await assertProjectAccess(app.prisma, userId, item.projectId, 'reader');
       return toWorkItemDTO(item);
     },
   );
@@ -176,7 +199,7 @@ export async function registerWorkItemRoutes(app: FastifyInstance): Promise<void
     {
       schema: {
         tags: ['work-items'],
-        summary: 'Update a work item',
+        summary: 'Update a work item (writer+ on its project)',
         security: [{ bearerAuth: [] }],
         params: idParamsSchema,
         body: workItemUpdateSchema,
@@ -184,17 +207,20 @@ export async function registerWorkItemRoutes(app: FastifyInstance): Promise<void
           200: workItemSchema,
           400: errorResponseSchema,
           401: errorResponseSchema,
+          403: errorResponseSchema,
           404: errorResponseSchema,
         },
       },
     },
     async (req) => {
+      const userId = currentUserId(req);
       const { id } = req.params as z.infer<typeof idParamsSchema>;
       const patch = req.body as z.infer<typeof workItemUpdateSchema>;
       const item = await app.prisma.workItem.findUnique({ where: { id } });
       if (!item) {
         throw notFound(`Work item ${id} not found`);
       }
+      await assertProjectAccess(app.prisma, userId, item.projectId, 'writer');
 
       if (patch.assigneeId !== undefined && patch.assigneeId !== null) {
         const user = await app.prisma.user.findUnique({ where: { id: patch.assigneeId } });
@@ -227,22 +253,25 @@ export async function registerWorkItemRoutes(app: FastifyInstance): Promise<void
     {
       schema: {
         tags: ['work-items'],
-        summary: 'Delete a work item',
+        summary: 'Delete a work item (writer+ on its project)',
         security: [{ bearerAuth: [] }],
         params: idParamsSchema,
         response: {
           204: z.null(),
           401: errorResponseSchema,
+          403: errorResponseSchema,
           404: errorResponseSchema,
         },
       },
     },
     async (req, reply) => {
+      const userId = currentUserId(req);
       const { id } = req.params as z.infer<typeof idParamsSchema>;
       const item = await app.prisma.workItem.findUnique({ where: { id } });
       if (!item) {
         throw notFound(`Work item ${id} not found`);
       }
+      await assertProjectAccess(app.prisma, userId, item.projectId, 'writer');
       await app.prisma.workItem.delete({ where: { id } });
       return reply.status(204).send();
     },
@@ -253,7 +282,7 @@ export async function registerWorkItemRoutes(app: FastifyInstance): Promise<void
     {
       schema: {
         tags: ['work-items'],
-        summary: 'Reparent a work item (validates parent-type rules)',
+        summary: 'Reparent a work item (writer+ on its project)',
         security: [{ bearerAuth: [] }],
         params: idParamsSchema,
         body: workItemMoveSchema,
@@ -261,11 +290,13 @@ export async function registerWorkItemRoutes(app: FastifyInstance): Promise<void
           200: workItemSchema,
           400: errorResponseSchema,
           401: errorResponseSchema,
+          403: errorResponseSchema,
           404: errorResponseSchema,
         },
       },
     },
     async (req) => {
+      const userId = currentUserId(req);
       const { id } = req.params as z.infer<typeof idParamsSchema>;
       const { parentId } = req.body as z.infer<typeof workItemMoveSchema>;
 
@@ -276,6 +307,7 @@ export async function registerWorkItemRoutes(app: FastifyInstance): Promise<void
       if (!item) {
         throw notFound(`Work item ${id} not found`);
       }
+      await assertProjectAccess(app.prisma, userId, item.projectId, 'writer');
 
       let parentType: ReturnType<typeof kindToPrisma> | null = null;
       if (parentId) {
@@ -292,6 +324,8 @@ export async function registerWorkItemRoutes(app: FastifyInstance): Promise<void
         if (parent.projectId !== item.projectId) {
           throw badRequest('Parent belongs to a different project');
         }
+        // Parent is in the same project (already enforced); writer check on
+        // that project covers cross-tenant abuse.
         parentType = parent.type;
       }
 
