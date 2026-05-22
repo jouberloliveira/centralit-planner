@@ -12,7 +12,7 @@ async function register(app: FastifyInstance, email: string): Promise<UserCtx> {
   const res = await app.inject({
     method: 'POST',
     url: '/auth/register',
-    payload: { email, password: 'password123', name: email.split('@')[0] },
+    payload: { email, password: 'password1234', name: email.split('@')[0] },
   });
   const body = res.json() as { token: string; user: { id: string } };
   return { token: body.token, userId: body.user.id };

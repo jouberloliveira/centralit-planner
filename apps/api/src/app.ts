@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import jwt from '@fastify/jwt';
+import rateLimit from '@fastify/rate-limit';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import type { PrismaClient } from '@prisma/client';
@@ -14,6 +15,8 @@ import {
   type ZodTypeProvider,
 } from 'fastify-type-provider-zod';
 import { HttpError } from './lib/errors.js';
+import { hibpBreachChecker, noopBreachChecker, type BreachChecker } from './lib/hibp.js';
+import { createMemoryLockoutStore, type LockoutStore } from './lib/lockout.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerProjectRoutes } from './routes/projects.js';
@@ -25,6 +28,12 @@ export interface BuildAppOptions {
   jwtExpiresIn?: string;
   corsOrigin?: string[];
   logLevel?: string;
+  /** Register @fastify/rate-limit. Off by default so unit tests are not throttled. */
+  enableRateLimit?: boolean;
+  /** HIBP-style breach checker (CEN-22 H3). Defaults to live HIBP when rate-limit is on, noop otherwise. */
+  breachChecker?: BreachChecker;
+  /** Per-account login lockout store (CEN-22 H1). Defaults to in-memory. */
+  lockoutStore?: LockoutStore;
 }
 
 export interface AuthTokenPayload {
@@ -37,6 +46,8 @@ declare module 'fastify' {
     prisma: PrismaClient;
     jwtExpiresIn: string;
     requireAuth: (req: FastifyRequest) => Promise<void>;
+    breachChecker: BreachChecker;
+    lockoutStore: LockoutStore;
   }
 }
 
@@ -71,6 +82,20 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
 
   app.decorate('prisma', opts.prisma);
   app.decorate('jwtExpiresIn', opts.jwtExpiresIn ?? '7d');
+  app.decorate(
+    'breachChecker',
+    opts.breachChecker ?? (opts.enableRateLimit ? hibpBreachChecker : noopBreachChecker),
+  );
+  app.decorate('lockoutStore', opts.lockoutStore ?? createMemoryLockoutStore());
+
+  if (opts.enableRateLimit) {
+    // Global 100/min/IP. /auth/login + /auth/register tighten via per-route config.
+    await app.register(rateLimit, {
+      global: true,
+      max: 100,
+      timeWindow: '1 minute',
+    });
+  }
 
   app.addHook('onResponse', async (req, reply) => {
     reply.header('x-request-id', req.id);
