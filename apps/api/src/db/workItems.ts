@@ -21,7 +21,7 @@ export function assertParentAllowed(
   if (parentType === null) {
     return;
   }
-  const allowed = VALID_PARENT_TYPES[childType];
+  const allowed = VALID_PARENT_TYPES[childType] ?? [];
   if (allowed.length === 0) {
     throw new WorkItemParentRuleError(`${childType} work item cannot have a parent`);
   }
